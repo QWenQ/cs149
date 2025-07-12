@@ -63,8 +63,8 @@ int main(int argc, char * argv[]) {
   clampedExpSerial(values, exponents, gold, N);
   clampedExpVector(values, exponents, output, N);
 
-  //absSerial(values, gold, N);
-  //absVector(values, output, N);
+  // absSerial(values, gold, N);
+  // absVector(values, output, N);
 
   printf("\e[1;31mCLAMPED EXPONENT\e[0m (required) \n");
   bool clampedCorrect = verifyResult(values, exponents, output, gold, N);
@@ -249,7 +249,41 @@ void clampedExpVector(float* values, int* exponents, float* output, int N) {
   // Your solution should work for any value of
   // N and VECTOR_WIDTH, not just when VECTOR_WIDTH divides N
   //
-  
+  while (false) {};
+  __cs149_vec_int vec_exp;
+  __cs149_vec_int ones = _cs149_vset_int(1);
+  __cs149_vec_int zeros = _cs149_vset_int(0);
+  __cs149_vec_float result;
+  __cs149_vec_float vec_float;
+  __cs149_vec_float clamp_floor = _cs149_vset_float(9.999999f);
+  __cs149_mask mask_all;
+  __cs149_mask clamp_mask;
+
+  for (int i = 0; i < N; i += VECTOR_WIDTH) {
+	  // in case that i + VECTOR_WIDTH > N
+	  int mask_len = std::min(VECTOR_WIDTH, N - i);
+	  mask_all = _cs149_init_ones(mask_len);
+	  clamp_mask = _cs149_init_ones(mask_len);
+
+	  // load values from contiguous memory addr
+	  _cs149_vset_float(result, 1.0f, mask_all);
+	  _cs149_vload_float(vec_float, values + i, mask_all);
+	  _cs149_vload_int(vec_exp, exponents + i, mask_all);
+	  // calculate res = val[i] * exp[i]
+	  while (true) {
+		  _cs149_vgt_int(mask_all, vec_exp, zeros, mask_all);
+		  int one_cnt = _cs149_cntbits(mask_all);
+		  if (one_cnt == 0) break;
+		  _cs149_vmult_float(result, result, vec_float, mask_all);
+		  _cs149_vsub_int(vec_exp, vec_exp, ones, mask_all);
+	  }
+	  // clamp clause
+	  _cs149_vgt_float(mask_all, result, clamp_floor, clamp_mask);
+	  _cs149_vset_float(result, 9.999999f, mask_all);
+
+	  // load res to output[i]
+	  _cs149_vstore_float(output + i, result, clamp_mask);
+  }
 }
 
 // returns the sum of all elements in values
@@ -271,10 +305,20 @@ float arraySumVector(float* values, int N) {
   // CS149 STUDENTS TODO: Implement your vectorized version of arraySumSerial here
   //
   
-  for (int i=0; i<N; i+=VECTOR_WIDTH) {
+  __cs149_mask mask_all = _cs149_init_ones();
+  __cs149_vec_float vec_float;
+  __cs149_vec_float result = _cs149_vset_float(0.0f);
 
+  for (int i=0; i<N; i+=VECTOR_WIDTH) {
+	  _cs149_vload_float(vec_float, values + i, mask_all);
+	  _cs149_vadd_float(result, result, vec_float, mask_all);
   }
 
-  return 0.0;
+  for (int i = 1; i < VECTOR_WIDTH; i *= 2) {
+	  _cs149_hadd_float(result, result);
+	  _cs149_interleave_float(result, result);
+  }
+
+  return result.value[0];
 }
 
