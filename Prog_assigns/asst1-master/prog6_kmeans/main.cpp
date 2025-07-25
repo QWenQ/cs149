@@ -90,7 +90,7 @@ int main() {
   // NOTE: we will grade your submission using the data in data.dat
   // which is read by this function
   readData("./data.dat", &data, &clusterCentroids, &clusterAssignments, &M, &N,
-           &K, &epsilon);
+  	&K, &epsilon);
 
   // NOTE: if you want to generate your own data (for fun), you can use the
   // below code
@@ -121,11 +121,10 @@ int main() {
     }
     clusterAssignments[m] = bestAssignment;
   }
+  */
 
   // Uncomment to generate data file
-  // writeData("./data.dat", data, clusterCentroids, clusterAssignments, &M, &N,
-  //           &K, &epsilon);
-  */
+  // writeData("./data.dat", data, clusterCentroids, clusterAssignments, &M, &N, &K, &epsilon);
 
   printf("Running K-means with: M=%d, N=%d, K=%d, epsilon=%f\n", M, N,
          K, epsilon);

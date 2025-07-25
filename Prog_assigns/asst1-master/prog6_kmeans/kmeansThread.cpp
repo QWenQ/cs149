@@ -65,8 +65,10 @@ double dist(double *x, double *y, int nDim) {
  * Assigns each data point to its "closest" cluster centroid.
  */
 void computeAssignments(WorkerArgs *const args) {
+  // double startTime = CycleTimer::currentSeconds();
+
   double *minDist = new double[args->M];
-  
+
   // Initialize arrays
   for (int m =0; m < args->M; m++) {
     minDist[m] = 1e30;
@@ -74,18 +76,22 @@ void computeAssignments(WorkerArgs *const args) {
   }
 
   // Assign datapoints to closest centroids
-  for (int k = args->start; k < args->end; k++) {
-    for (int m = 0; m < args->M; m++) {
-      double d = dist(&args->data[m * args->N],
-                      &args->clusterCentroids[k * args->N], args->N);
-      if (d < minDist[m]) {
-        minDist[m] = d;
-        args->clusterAssignments[m] = k;
-      }
-    }
+  for (int k = 0; k < args->K; k++) {
+	  for (int m = args->start; m < args->end; m++) {
+		  double d = dist(&args->data[m * args->N],
+			      &args->clusterCentroids[k * args->N], args->N);
+		  if (d < minDist[m]) {
+			minDist[m] = d;
+			args->clusterAssignments[m] = k;
+		  }
+	  }
   }
 
+  // delete[] minDist;
   free(minDist);
+
+  // double endTime = CycleTimer::currentSeconds();
+  // printf("\t[computeAssignments Time]:\t %.3f ms\n", (endTime - startTime) * 1000);
 }
 
 /**
@@ -93,6 +99,9 @@ void computeAssignments(WorkerArgs *const args) {
  * each cluster.
  */
 void computeCentroids(WorkerArgs *const args) {
+  // double startTime = CycleTimer::currentSeconds();
+  
+
   int *counts = new int[args->K];
 
   // Zero things out
@@ -123,12 +132,20 @@ void computeCentroids(WorkerArgs *const args) {
   }
 
   free(counts);
+  // delete[] counts;
+
+
+  // double endTime = CycleTimer::currentSeconds();
+  // printf("\t[computeCentroids Time]:\t %.3f ms\n", (endTime - startTime) * 1000);
 }
 
 /**
  * Computes the per-cluster cost. Used to check if the algorithm has converged.
  */
 void computeCost(WorkerArgs *const args) {
+  // double startTime = CycleTimer::currentSeconds();
+
+
   double *accum = new double[args->K];
 
   // Zero things out
@@ -149,7 +166,13 @@ void computeCost(WorkerArgs *const args) {
   }
 
   free(accum);
+  // delete[] accum;
+
+
+  // double endTime = CycleTimer::currentSeconds();
+  // printf("\t[computeCost Time]:\t\t %.3f ms\n\n", (endTime - startTime) * 1000);
 }
+
 
 /**
  * Computes the K-Means algorithm, using std::thread to parallelize the work.
@@ -178,22 +201,47 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
   double *prevCost = new double[K];
   double *currCost = new double[K];
 
-  // The WorkerArgs array is used to pass inputs to and return output from
-  // functions.
-  WorkerArgs args;
-  args.data = data;
-  args.clusterCentroids = clusterCentroids;
-  args.clusterAssignments = clusterAssignments;
-  args.currCost = currCost;
-  args.M = M;
-  args.N = N;
-  args.K = K;
-
   // Initialize arrays to track cost
   for (int k = 0; k < K; k++) {
     prevCost[k] = 1e30;
     currCost[k] = 0.0;
   }
+
+
+  // TODO: execute computeAssignments() using std::thread
+  int numThreads = 16;
+  std::thread workers[numThreads];
+  // The WorkerArgs array is used to pass inputs to and return output from functions.
+  WorkerArgs args[numThreads + 1];
+  int stride = M / numThreads;
+  // initialize WorkerArgs array
+  for (int i = 0; i < numThreads; ++i) {
+	  args[i].data = data;
+	  args[i].clusterCentroids = clusterCentroids;
+	  args[i].clusterAssignments = clusterAssignments;
+	  args[i].currCost = currCost;
+	  args[i].M = M;
+	  args[i].N = N;
+	  args[i].K = K;
+
+	  args[i].start = stride * i;
+	  if (i + 1 != numThreads) {
+	  	args[i].end = stride * (i + 1);
+	  }
+	  else {
+	  	args[i].end = M;
+	  }
+  }
+
+  args[numThreads].data = data;
+  args[numThreads].clusterCentroids = clusterCentroids;
+  args[numThreads].clusterAssignments = clusterAssignments;
+  args[numThreads].currCost = currCost;
+  args[numThreads].M = M;
+  args[numThreads].N = N;
+  args[numThreads].K = K;
+  args[numThreads].start = 0;
+  args[numThreads].end = K;
 
   /* Main K-Means Algorithm Loop */
   int iter = 0;
@@ -202,18 +250,27 @@ void kMeansThread(double *data, double *clusterCentroids, int *clusterAssignment
     for (int k = 0; k < K; k++) {
       prevCost[k] = currCost[k];
     }
+    
+    // parallel computation
+    for (int i = 1; i < numThreads; ++i) {
+	    workers[i] = std::thread(computeAssignments, &args[i]);
+    }
 
-    // Setup args struct
-    args.start = 0;
-    args.end = K;
+    computeAssignments(&args[0]);
 
-    computeAssignments(&args);
-    computeCentroids(&args);
-    computeCost(&args);
+    for (int i = 1; i < numThreads; ++i) {
+	    workers[i].join();
+    }
+  	
+    // computeAssignments(&args[numThreads]);
+    computeCentroids(&args[numThreads]);
+    computeCost(&args[numThreads]);
 
     iter++;
   }
 
   free(currCost);
   free(prevCost);
+  // delete[] currCost;
+  // delete[] prevCost;
 }
